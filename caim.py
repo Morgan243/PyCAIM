@@ -71,7 +71,10 @@ class CAIM(object):
                                                    ascending=True)
 
                     CAIMValue = self.CAIM_eval(self.OriginalData,
-                                          self.C, p, DTemp[:k+2])
+                                               Y.columns, p, DTemp[:k+2])
+
+                    #CAIMValue = self.CAIM_eval(self.OriginalData,
+                    #                      self.C, p, DTemp[:k+2])
                     if CAIM < CAIMValue:
                         CAIM = CAIMValue
                         Local = q
@@ -92,58 +95,28 @@ class CAIM(object):
 
         self.DiscretizationSet_dict[p] = D[:k+1]
         self.DiscreteData.ix[:,p],_ = self.discrete_with_interval(self.OriginalData,
-                                                           self.C, p, D[:k+1])
+                                                                  Y.columns, p, D[:k+1])
 
     @staticmethod
-    def CAIM_eval(OriginalData, C, Feature, DiscreteInterval):
-        k = len(DiscreteInterval)
-        discrete_data, quanta_matrix = CAIM.discrete_with_interval(OriginalData,
-                                                                 C, Feature,
-                                                                 DiscreteInterval)
-        SumQuantaMatrix = quanta_matrix.sum()
-        CAIMValue = 0
-        for p in range(0, k):
-            q_max = quanta_matrix.ix[:,p].max()
-            if q_max > 0:
-                CAIMValue = CAIMValue + (q_max)**2/SumQuantaMatrix[p]
+    def intermediate_caim_compute(x):
+        return 0 if x[0] < 0 else (x[0]**2)/x.sums
 
-        return CAIMValue/k
 
     @staticmethod
-    def discrete_with_interval(OriginalData,
-                               C, column,
-                               DiscreteInterval):
+    def CAIM_eval(original_data, class_names, feature_name, discrete_interval):
+        k = len(discrete_interval)
+        discrete_data, quanta_matrix = CAIM.discrete_with_interval(original_data,
+                                                                   class_names, feature_name,
+                                                                   discrete_interval)
+        #quanta_max = quanta_matrix.max().reset_index()
+        #quanta_max['sums'] = quanta_matrix.sum()
+        #caim_value = quanta_max.iloc[:k].apply(CAIM.intermediate_caim_compute, axis=1).sum()
 
-        M = len(OriginalData)
-        try:
-            k = len(DiscreteInterval)
-        except:
-            k = 1
-            DiscreteInterval = pd.Series([DiscreteInterval])
-        F = len(OriginalData.columns) - C
-        DiscreteData = pd.Series(0.0,
-                                 index = np.arange(M))
-        for p in range(0, M):
-            for t in range(0, k):
-                if OriginalData.ix[p, column] <= DiscreteInterval.values[t]:
-                    DiscreteData[p] = t #- 1
-                    break
-                else:
-                    DiscreteData[p] = k
+        quanta_max_sum = pd.DataFrame({0:quanta_matrix.max(),
+                                       'sums':quanta_matrix.sum()})
+        caim_value = quanta_max_sum.iloc[:k].apply(CAIM.intermediate_caim_compute, axis=1).sum()
 
-        CState = C
-        FState = len(DiscreteInterval) + 1
-        QuantaMatrix = pd.DataFrame(0.0,
-                                    index = np.arange(CState),
-                                    columns = range(0,FState))
-        for p in range(0, M):
-            for q in range(0, C):
-                if OriginalData.ix[p,F+q] == 1:
-                    Row = q
-                    Column = int(DiscreteData[p])
-                    QuantaMatrix.ix[Row, Column] = QuantaMatrix.ix[Row, Column] + 1
-
-        return DiscreteData, QuantaMatrix
+        return caim_value/k
 
     @staticmethod
     def within_interval(row, interval):
@@ -154,44 +127,44 @@ class CAIM(object):
             return len(interval)
 
     @staticmethod
-    def discrete_with_interval_2(original_data, class_fields,
+    def discrete_with_interval(original_data, class_fields,
                                  column, discrete_interval):
 
-        M = len(original_data)
-        try:
-            k = len(discrete_interval)
-        except:
-            k = 1
+        if not isinstance(discrete_interval, pd.Series):
             discrete_interval = pd.Series([discrete_interval])
+
+        k = len(discrete_interval)
 
         num_classes = len(class_fields)
         column_name = original_data.columns[column]
 
+        # TODO: Use discrete_interval as an np.array rather than series requires changes to within_interval
         discrete_data = original_data[column_name].apply(lambda x: CAIM.within_interval(x, discrete_interval))
 
         CState = num_classes
-        FState = len(discrete_interval) + 1
-        quanta_matrix = pd.DataFrame(0.0,
-                                     index=np.arange(CState),
-                                     columns=range(0, FState))
+        FState = k + 1
+        # Build quanta_matrix as np.array
+        quanta_matrix = np.array([[0.0]*FState] * CState)
 
-        #class_columns = ['C0', 'C1', 'C2']
         is_one = original_data[class_fields] == 1
         class_vals = is_one.reset_index()
 
+        # Compute the quanta_matrix columns per each input row
         class_vals['cols'] = class_vals['index'].apply(lambda x: int(discrete_data[x]))
-        #class_vals['rows'] = (input_df[['C0', 'C1', 'C2']] * np.array([0,1,2])).T.sum()
-        class_vals['rows'] = (input_df[class_fields] * np.arange(num_classes)).T.sum()
-        print(class_vals)
+        # Compute the quanta_matrix row per each input row
+        class_vals['rows'] = (original_data[class_fields] * np.arange(num_classes)).T.sum()
 
+        # TODO: Try pulling and iterating over values for speed gain
+        # Build the quanta_matric
         for idx, row in class_vals.iterrows():
-            quanta_matrix.ix[int(row.rows), int(row.cols)] += 1
+            quanta_matrix[int(row.rows), int(row.cols)] += 1
 
-        return discrete_data, quanta_matrix
+        return discrete_data, pd.DataFrame(quanta_matrix)
 
     def fit(self, X, Y):
         self._create_init_data(X, Y)
 
+        # TODO: Parallize with fork server?
         for p in range(0, self.F):
             self._run_feature(X, Y, p)
 
