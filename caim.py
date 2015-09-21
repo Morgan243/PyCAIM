@@ -73,8 +73,6 @@ class CAIM(object):
                     CAIMValue = self.CAIM_eval(self.OriginalData,
                                                Y.columns, p, DTemp[:k+2])
 
-                    #CAIMValue = self.CAIM_eval(self.OriginalData,
-                    #                      self.C, p, DTemp[:k+2])
                     if CAIM < CAIMValue:
                         CAIM = CAIMValue
                         Local = q
@@ -130,7 +128,8 @@ class CAIM(object):
     def discrete_with_interval(original_data, class_fields,
                                  column, discrete_interval):
 
-        if not isinstance(discrete_interval, pd.Series):
+        #if not isinstance(discrete_interval, pd.Series):
+        if type(discrete_interval) != pd.Series:
             discrete_interval = pd.Series([discrete_interval])
 
         k = len(discrete_interval)
@@ -143,8 +142,6 @@ class CAIM(object):
 
         CState = num_classes
         FState = k + 1
-        # Build quanta_matrix as np.array
-        quanta_matrix = np.array([[0.0]*FState] * CState)
 
         is_one = original_data[class_fields] == 1
         class_vals = is_one.reset_index()
@@ -153,6 +150,10 @@ class CAIM(object):
         class_vals['cols'] = class_vals['index'].apply(lambda x: int(discrete_data[x]))
         # Compute the quanta_matrix row per each input row
         class_vals['rows'] = (original_data[class_fields] * np.arange(num_classes)).T.sum()
+
+        # Build quanta_matrix as np.array
+        # Matlab implementation lets the quanta_matrix auto-resize as values are added in below loop
+        quanta_matrix = np.array([[0.0]*FState] * (int(class_vals.rows.max()) + 1))
 
         # TODO: Try pulling and iterating over values for speed gain
         # Build the quanta_matric
@@ -165,7 +166,9 @@ class CAIM(object):
         self._create_init_data(X, Y)
 
         # TODO: Parallize with fork server?
+        print("Num Features: %d" % self.F )
         for p in range(0, self.F):
+            print("Working on %s" % str(p))
             self._run_feature(X, Y, p)
 
         self.DiscretizationSet = pd.DataFrame(self.DiscretizationSet_dict)
