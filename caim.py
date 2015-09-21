@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import math
 import warnings
+from functools import partial
 warnings.filterwarnings('error')
 
 
@@ -24,6 +25,7 @@ class CAIM(object):
 
         assert len(X) == len(Y)
         m = len(X)
+        Y = Y.astype(int)
         self.OriginalData = X.join(Y)
 
         discrete_data = pd.DataFrame(0,
@@ -107,11 +109,11 @@ class CAIM(object):
 
     @staticmethod
     def within_interval(row, interval):
-        match = interval[interval >= row]
-        if len(match) > 0:
-            return match.index[0]
-        else:
-            return len(interval)
+        for i, val in enumerate(interval.values):
+            if val >= row:
+                return i
+
+        return len(interval)
 
     @staticmethod
     def discrete_with_interval(original_data, class_fields,
@@ -126,8 +128,9 @@ class CAIM(object):
         num_classes = len(class_fields)
         column_name = original_data.columns[column]
 
+        f = partial(CAIM.within_interval, interval=discrete_interval)
         # TODO: Use discrete_interval as an np.array rather than series requires changes to within_interval
-        discrete_data = original_data[column_name].apply(lambda x: CAIM.within_interval(x, discrete_interval))
+        discrete_data = original_data[column_name].apply(f)
 
         cstate = num_classes
         fstate = k + 1
@@ -136,18 +139,22 @@ class CAIM(object):
         class_vals = is_one.reset_index()
 
         # Compute the quanta_matrix columns per each input row
-        class_vals['cols'] = class_vals['index'].apply(lambda x: int(discrete_data[x]))
+        class_vals['cols'] = class_vals['index'].apply(discrete_data.values.__getitem__)
         # Compute the quanta_matrix row per each input row
         class_vals['rows'] = (original_data[class_fields] * np.arange(num_classes)).T.sum()
 
         # Build quanta_matrix as np.array
         # Matlab implementation lets the quanta_matrix auto-resize as values are added in below loop
-        quanta_matrix = np.array([[0.0]*fstate] * (int(class_vals.rows.max()) + 1))
+        #quanta_matrix = np.array([[0.0]*fstate] * (int(class_vals.rows.max()) + 1))
+        quanta_matrix = np.array([[0]*fstate] * ((class_vals.rows.max()) + 1))
 
         # TODO: Try pulling and iterating over values for speed gain
         # Build the quanta_matrix
-        for idx, row in class_vals.iterrows():
-            quanta_matrix[int(row.rows), int(row.cols)] += 1
+        #for idx, row in class_vals.iterrows():
+            #quanta_matrix[int(row.rows), int(row.cols)] += 1
+        for row in class_vals[['rows', 'cols']].values:
+            #quanta_matrix[int(row[0]), int(row[1])] += 1
+            quanta_matrix[row[0], row[1]] += 1
 
         return discrete_data, pd.DataFrame(quanta_matrix)
 
@@ -155,7 +162,10 @@ class CAIM(object):
         self._create_init_data(X, Y)
 
         # TODO: Parallelize with fork server?
+        print("Total features: %s" % self.F)
+        #for p in range(0, self.F)[:1]:
         for p in range(0, self.F):
+            print("Running: %s" % str(p))
             self._run_feature(X, Y, p)
 
         self.DiscretizationSet = pd.DataFrame(self.DiscretizationSet_dict)
