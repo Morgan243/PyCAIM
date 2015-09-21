@@ -4,7 +4,7 @@ import numpy as np
 import math
 import warnings
 warnings.filterwarnings('error')
-#import pdb
+
 
 class CAIM(object):
     def __init__(self):
@@ -27,16 +27,10 @@ class CAIM(object):
         self.OriginalData = X.join(Y)
 
         discrete_data = pd.DataFrame(0,
-                                    index=np.arange(m),
-                                    columns=full_columns)
+                                     index=np.arange(m),
+                                     columns=full_columns)
         discrete_data[Y.columns] = Y
         max_num_f = math.floor(m/(3*c))
-        #DiscretizationSet = pd.DataFrame(0,
-        #                                 index = np.arange(MaxNumF),
-        #                                 columns = list(X.columns))
-        #DiscretizationSet = np.array(
-        #    [[]]*len(X.columns)
-        #)
 
         self.C, self.F, self.M = c, f, m
         self.DiscreteData      = discrete_data
@@ -82,23 +76,22 @@ class CAIM(object):
                 k += 1
                 D[k] = B[Local]
                 D[:k+1] = D[:k+1].sort(inplace=False,
-                                   ascending=True).copy()
-            elif (k + 1) <= self.MaxNumF and (k + 1)<= self.C:
+                                       ascending=True).copy()
+            elif (k + 1) <= self.MaxNumF and (k + 1) <= self.C:
                 k += 1
                 D[k] = B[Local]
                 D[:k+1] = D[:k+1].sort(inplace=False,
-                                   ascending=True).copy()
+                                       ascending=True).copy()
             else:
                 done = True
 
         self.DiscretizationSet_dict[p] = D[:k+1]
-        self.DiscreteData.ix[:,p],_ = self.discrete_with_interval(self.OriginalData,
-                                                                  Y.columns, p, D[:k+1])
+        self.DiscreteData.ix[:, p], _ = self.discrete_with_interval(self.OriginalData,
+                                                                    Y.columns, p, D[:k+1])
 
     @staticmethod
     def intermediate_caim_compute(x):
         return 0 if x[0] < 0 else (x[0]**2)/x.sums
-
 
     @staticmethod
     def CAIM_eval(original_data, class_names, feature_name, discrete_interval):
@@ -106,12 +99,8 @@ class CAIM(object):
         discrete_data, quanta_matrix = CAIM.discrete_with_interval(original_data,
                                                                    class_names, feature_name,
                                                                    discrete_interval)
-        #quanta_max = quanta_matrix.max().reset_index()
-        #quanta_max['sums'] = quanta_matrix.sum()
-        #caim_value = quanta_max.iloc[:k].apply(CAIM.intermediate_caim_compute, axis=1).sum()
-
-        quanta_max_sum = pd.DataFrame({0:quanta_matrix.max(),
-                                       'sums':quanta_matrix.sum()})
+        quanta_max_sum = pd.DataFrame({0: quanta_matrix.max(),
+                                       'sums': quanta_matrix.sum()})
         caim_value = quanta_max_sum.iloc[:k].apply(CAIM.intermediate_caim_compute, axis=1).sum()
 
         return caim_value/k
@@ -128,7 +117,7 @@ class CAIM(object):
     def discrete_with_interval(original_data, class_fields,
                                  column, discrete_interval):
 
-        #if not isinstance(discrete_interval, pd.Series):
+        # TODO: make typing more consistent so we don't have to do these checks
         if type(discrete_interval) != pd.Series:
             discrete_interval = pd.Series([discrete_interval])
 
@@ -140,8 +129,8 @@ class CAIM(object):
         # TODO: Use discrete_interval as an np.array rather than series requires changes to within_interval
         discrete_data = original_data[column_name].apply(lambda x: CAIM.within_interval(x, discrete_interval))
 
-        CState = num_classes
-        FState = k + 1
+        cstate = num_classes
+        fstate = k + 1
 
         is_one = original_data[class_fields] == 1
         class_vals = is_one.reset_index()
@@ -153,10 +142,10 @@ class CAIM(object):
 
         # Build quanta_matrix as np.array
         # Matlab implementation lets the quanta_matrix auto-resize as values are added in below loop
-        quanta_matrix = np.array([[0.0]*FState] * (int(class_vals.rows.max()) + 1))
+        quanta_matrix = np.array([[0.0]*fstate] * (int(class_vals.rows.max()) + 1))
 
         # TODO: Try pulling and iterating over values for speed gain
-        # Build the quanta_matric
+        # Build the quanta_matrix
         for idx, row in class_vals.iterrows():
             quanta_matrix[int(row.rows), int(row.cols)] += 1
 
@@ -165,15 +154,11 @@ class CAIM(object):
     def fit(self, X, Y):
         self._create_init_data(X, Y)
 
-        # TODO: Parallize with fork server?
-        print("Num Features: %d" % self.F )
+        # TODO: Parallelize with fork server?
         for p in range(0, self.F):
-            print("Working on %s" % str(p))
             self._run_feature(X, Y, p)
 
         self.DiscretizationSet = pd.DataFrame(self.DiscretizationSet_dict)
-        #print(self.DiscreteData)
-        #print(self.DiscretizationSet)
         return self
 
 
@@ -186,7 +171,6 @@ def parse_field_arguments(all_columns, target_arg_str):
             targets      = [all_columns[i] for i in targets_ints]
         except:
             pass
-            #targets = [int(s) for s in target_str]
 
     else:
         target_points = target_arg_str.split('-')
@@ -198,7 +182,7 @@ def parse_field_arguments(all_columns, target_arg_str):
     return features, targets
 
 if __name__ == "__main__":
-    desc = "CAIM Algorithm Command Line Tool"
+    desc = "CAIM Algorithm Command Line Tool and Library"
     parser = argparse.ArgumentParser(description=desc)
 
     parser.add_argument('input_data', metavar='input_file',
@@ -223,7 +207,7 @@ if __name__ == "__main__":
     if args.header:
         input_df = pd.read_csv(args.input_data[0])
     else:
-        input_df = pd.read_csv(args.input_data[0], header = None)
+        input_df = pd.read_csv(args.input_data[0], header=None)
 
     feature_fields, target_fields = parse_field_arguments(input_df.columns,
                                                           args.target_field)
