@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import math
 import warnings
+from bisect import bisect_left, bisect, bisect_right
 from functools import partial
 warnings.filterwarnings('error')
 
@@ -108,16 +109,13 @@ class CAIM(object):
         return caim_value/k
 
     @staticmethod
-    def within_interval(row, interval):
-        for i, val in enumerate(interval.values):
-            if val >= row:
-                return i
-
-        return len(interval)
+    def within_interval(row, interval, int_len):
+        # Binary search could help for larger intervals
+        return next((i for i, val in interval if val >= row), int_len)
 
     @staticmethod
     def discrete_with_interval(original_data, class_fields,
-                                 column, discrete_interval):
+                               column, discrete_interval):
 
         # TODO: make typing more consistent so we don't have to do these checks
         if type(discrete_interval) != pd.Series:
@@ -128,7 +126,11 @@ class CAIM(object):
         num_classes = len(class_fields)
         column_name = original_data.columns[column]
 
-        f = partial(CAIM.within_interval, interval=discrete_interval)
+        f = partial(CAIM.within_interval,
+                    interval=(list(enumerate(discrete_interval.values))), # most readable
+                    #interval=np.array(list(zip(discrete_interval.index.values, discrete_interval.values))),
+                    #interval=np.vstack((discrete_interval.index.values, discrete_interval.values)).T,
+                    int_len=k)
         # TODO: Use discrete_interval as an np.array rather than series requires changes to within_interval
         discrete_data = original_data[column_name].apply(f)
 
@@ -145,15 +147,10 @@ class CAIM(object):
 
         # Build quanta_matrix as np.array
         # Matlab implementation lets the quanta_matrix auto-resize as values are added in below loop
-        #quanta_matrix = np.array([[0.0]*fstate] * (int(class_vals.rows.max()) + 1))
         quanta_matrix = np.array([[0]*fstate] * ((class_vals.rows.max()) + 1))
 
-        # TODO: Try pulling and iterating over values for speed gain
         # Build the quanta_matrix
-        #for idx, row in class_vals.iterrows():
-            #quanta_matrix[int(row.rows), int(row.cols)] += 1
         for row in class_vals[['rows', 'cols']].values:
-            #quanta_matrix[int(row[0]), int(row[1])] += 1
             quanta_matrix[row[0], row[1]] += 1
 
         return discrete_data, pd.DataFrame(quanta_matrix)
@@ -204,6 +201,10 @@ if __name__ == "__main__":
                         help=("Target fields as integers (0-indexed) " +
                               "or strings corresponding to column names"))
 
+    parser.add_argument('-o', '--output-base-name',
+                        dest='output_base', default=None,
+                        help="Base name for outputs: <base>_data.csv and <base>_sets.csv")
+
     parser.add_argument('-H', '--header',
                         dest='header', default=False, action='store_true',
                         help="Use first row as column")
@@ -228,6 +229,14 @@ if __name__ == "__main__":
     caim = CAIM().fit(input_df[feature_fields],
                       input_df[target_fields])
 
-    print("New Dataset:\n------------\n%s\n" % str(caim.DiscreteData))
-    print("Sets:\n-----\n%s" % str(caim.DiscretizationSet))
+    if args.verbose:
+        print("New Dataset:\n------------\n%s\n" % str(caim.DiscreteData))
+        print("Sets:\n-----\n%s" % str(caim.DiscretizationSet))
+
+    if args.output_base:
+        caim.DiscreteData.to_csv('%s_data.csv' % args.output_base,
+                                 index=None)
+
+        caim.DiscretizationSet.to_csv('%s_sets.csv' % args.output_base,
+                                       index=None)
 
