@@ -3,8 +3,10 @@ import pandas as pd
 import numpy as np
 import math
 import warnings
+import multiprocessing
 from bisect import bisect_left, bisect, bisect_right
 from functools import partial
+from joblib import Parallel, delayed
 warnings.filterwarnings('error')
 
 
@@ -41,7 +43,8 @@ class CAIM(object):
         self.DiscretizationSet = None
         self.MaxNumF           = max_num_f
 
-    def _run_feature(self, X, Y, p):
+    def _run_feature(self, p, X, Y):
+        print("Starting %d" % p)
         SortedInterval = (pd.Series(X[X.columns[p]].unique())
                           .sort(inplace=False))
 
@@ -91,6 +94,10 @@ class CAIM(object):
         self.DiscretizationSet_dict[p] = D[:k+1]
         self.DiscreteData.ix[:, p], _ = self.discrete_with_interval(self.OriginalData,
                                                                     Y.columns, p, D[:k+1])
+        #disc_set = D[:k+1]
+        #disc_data, _ = self.discrete_with_interval(self.OriginalData,
+        #                                                            Y.columns, p, D[:k+1])
+        #return disc_set, disc_data
 
     @staticmethod
     def intermediate_caim_compute(x):
@@ -102,6 +109,7 @@ class CAIM(object):
         discrete_data, quanta_matrix = CAIM.discrete_with_interval(original_data,
                                                                    class_names, feature_name,
                                                                    discrete_interval)
+        #print(quanta_matrix)
         quanta_max_sum = pd.DataFrame({0: quanta_matrix.max(),
                                        'sums': quanta_matrix.sum()})
         caim_value = quanta_max_sum.iloc[:k].apply(CAIM.intermediate_caim_compute, axis=1).sum()
@@ -155,15 +163,38 @@ class CAIM(object):
 
         return discrete_data, pd.DataFrame(quanta_matrix)
 
-    def fit(self, X, Y):
+    def fit_parallel(self, X, Y):
         self._create_init_data(X, Y)
 
         # TODO: Parallelize with fork server?
         print("Total features: %s" % self.F)
         #for p in range(0, self.F)[:1]:
+        #Parallel(n_jobs=2)(delayed(sqrt)(i ** 2) for i in range(10))
+        #f = lambda x: self._run_feature(X, Y, x)
+        f = partial (self._run_feature, X=X, Y=Y)
+
+
+        #p = Parallel(n_jobs=2)
+        #p((f(p) for p in range(0, self.F)))
+        pool = multiprocessing.Pool(4)
+        #out1, out2, out3 = zip(*pool.map(calc_stuff, range(0, 10 * offset, offset)))
+        pool.map(f, range(0, self.F))
+
+        #for p in range(0, self.F):
+        #    print("Running: %s" % str(p))
+        #    self._run_feature(X, Y, p)
+
+        self.DiscretizationSet = pd.DataFrame(self.DiscretizationSet_dict)
+        return self
+
+    def fit(self, X, Y):
+        self._create_init_data(X, Y)
+
+        # TODO: Parallelize with fork server?
+        print("Total features: %s" % self.F)
         for p in range(0, self.F):
             print("Running: %s" % str(p))
-            self._run_feature(X, Y, p)
+            self._run_feature(p, X, Y)
 
         self.DiscretizationSet = pd.DataFrame(self.DiscretizationSet_dict)
         return self
