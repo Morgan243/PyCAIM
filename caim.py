@@ -7,6 +7,7 @@ import multiprocessing
 from bisect import bisect_left, bisect, bisect_right
 from functools import partial
 from joblib import Parallel, delayed
+from pprint import pprint
 warnings.filterwarnings('error')
 
 
@@ -15,7 +16,7 @@ class CAIM(object):
         pass
 
     def _create_init_data(self, X, Y):
-        full_columns = list(X.columns) + list(Y.columns)
+        full_columns = list(X.columns) + [Y.name]
         if isinstance(Y, pd.Series):
             c = 1
         else:
@@ -34,176 +35,160 @@ class CAIM(object):
         discrete_data = pd.DataFrame(0,
                                      index=np.arange(m),
                                      columns=full_columns)
-        discrete_data[Y.columns] = Y
-        max_num_f = math.floor(m/(3*c))
+        #discrete_data[Y.columns] = Y
+        #discrete_data[Y.columns] = Y
+        #max_num_f = math.floor(m/(3*c))
 
         self.C, self.F, self.M = c, f, m
-        self.DiscreteData      = discrete_data
-        self.DiscretizationSet_dict = dict()
-        self.DiscretizationSet = None
-        self.MaxNumF           = max_num_f
+        #self.DiscreteData      = discrete_data
+        #self.DiscretizationSet_dict = dict()
+        #self.DiscretizationSet = None
+        #self.MaxNumF           = max_num_f
 
-    def _run_feature(self, p, X, Y):
-        print("Starting %d" % p)
-        SortedInterval = (pd.Series(X[X.columns[p]].unique())
-                          .sort(inplace=False))
+    @staticmethod
+    def discretize_series(series, interval):
+        f = lambda x: interval[x] if x != 0 else interval[1]
+        binned = pd.Series(np.digitize(series,
+                                       interval,
+                                       right=True)).apply(f)
+        return binned
 
-        Len = len(SortedInterval)-1
-        B = pd.Series(0.0,
-                      index=np.arange(Len))
+    def _do_run_feature(self, feature_series, class_series, **kwargs):
+        return CAIM._run_feature(feature_series, class_series, **kwargs)
 
-        for q in range(0, Len):
-            B[q] = (SortedInterval[q] + SortedInterval[q+1])/2.0
+    @staticmethod
+    def _run_feature(feature_series, class_series):
+        print("Running %s" % str(feature_series.name))
+        k = 1
 
-        D = pd.Series(0.0,
-                      index=np.arange(self.MaxNumF))
-        GlobalCAIM = -np.inf
-        k = -1
+        input_data = pd.DataFrame([feature_series, class_series]).T
+        feature_name = feature_series.name
+        class_name   = class_series.name
+
+        num_classes = len(class_series.unique())-1
+        interval_idx = 1
         done = False
+
+        remaining_int = np.array(feature_series.unique()).astype(float)
+        remaining_int.sort()
+
+        if len(remaining_int) == 2:
+            remaining_int = np.insert(remaining_int, 1, remaining_int.max()/2.0)
+        elif len(remaining_int) == 1:
+            msg="Feature %s has only one unique value" % feature_series.name
+            raise ValueError(msg)
+
+        # Starting interval is end to end set
+        disc_interval = np.array([remaining_int[0], remaining_int[-1]])
+        remaining_int = remaining_int[1:-1]
+        f = lambda x: CAIM.build_quanta(input_data, x, feature_name, class_name)
+
+        global_caim = 0
         while not done:
-            CAIM  = -np.inf
-            Local = 0
-            for q in range(0, Len):
-                if not (D[:k+1] == B[q]).any():
-                    DTemp = D.copy(deep=True)
-                    DTemp[k+1] = B[q]
-                    DTemp[:k+2] = DTemp[:k+2].sort(inplace=False,
-                                                   ascending=True)
+            current_caim = -np.inf
+            current_int = np.nan
 
-                    CAIMValue = self.CAIM_eval(self.OriginalData,
-                                               Y.columns, p, DTemp[:k+2])
+            possibble_int = pd.Series([np.sort(np.insert(disc_interval, 0, add_int)) for add_int in remaining_int])
+            caims = possibble_int.apply(f).apply(CAIM.compute_caim)
+            caim_maxidx = caims.idxmax()
 
-                    if CAIM < CAIMValue:
-                        CAIM = CAIMValue
-                        Local = q
+            #caims_ints = pd.concat([possibble_int, caims], axis=1)
+            #best = caims_ints.iloc[caims_ints[1].idxmax()]
 
-            if GlobalCAIM < CAIM and (k + 1) < self.MaxNumF:
-                GlobalCAIM = CAIM
+            #current_caim = best[1]
+            #current_int = best[0]
+            current_caim = caims[caim_maxidx]
+            current_int = possibble_int[caim_maxidx]
+            current_add_int = remaining_int[caim_maxidx]
+            better_caim = current_caim > global_caim
+            if better_caim:
+                #print("Current CAIM: %f" % current_caim)
+                #print("Global CAIM: %f" % global_caim)
+                disc_interval = current_int
+                global_caim = current_caim
+            if k < num_classes or better_caim:
+                #print(current_add_int)
+                remaining_int = remaining_int[remaining_int != current_add_int]
+
                 k += 1
-                D[k] = B[Local]
-                D[:k+1] = D[:k+1].sort(inplace=False,
-                                       ascending=True).copy()
-            elif (k + 1) <= self.MaxNumF and (k + 1) <= self.C:
-                k += 1
-                D[k] = B[Local]
-                D[:k+1] = D[:k+1].sort(inplace=False,
-                                       ascending=True).copy()
             else:
                 done = True
 
-        self.DiscretizationSet_dict[p] = D[:k+1]
-        self.DiscreteData.ix[:, p], _ = self.discrete_with_interval(self.OriginalData,
-                                                                    Y.columns, p, D[:k+1])
-        #disc_set = D[:k+1]
-        #disc_data, _ = self.discrete_with_interval(self.OriginalData,
-        #                                                            Y.columns, p, D[:k+1])
-        #return disc_set, disc_data
+            if len(remaining_int) == 0:
+                done = True
+        #print("Best CAIM: %f" %global_caim)
+        #print("Interval : %s" % str(disc_interval))
+        return global_caim, disc_interval
 
     @staticmethod
-    def intermediate_caim_compute(x):
-        return 0 if x[0] < 0 else (x[0]**2)/x.sums
+    def build_quanta(input_data, intervals, feature_column, class_column):
+
+        binned = pd.Series(np.digitize(input_data[feature_column],
+                                       intervals,
+                                       right=True)).apply(lambda x: x if x != 0 else 1)
+
+        binned.name = 'bins'
+        grpby = [binned, class_column]
+        quanta = input_data.groupby(grpby).count()
+        return quanta
 
     @staticmethod
-    def CAIM_eval(original_data, class_names, feature_name, discrete_interval):
-        k = len(discrete_interval)
-        discrete_data, quanta_matrix = CAIM.discrete_with_interval(original_data,
-                                                                   class_names, feature_name,
-                                                                   discrete_interval)
-        #print(quanta_matrix)
-        quanta_max_sum = pd.DataFrame({0: quanta_matrix.max(),
-                                       'sums': quanta_matrix.sum()})
-        caim_value = quanta_max_sum.iloc[:k].apply(CAIM.intermediate_caim_compute, axis=1).sum()
+    def compute_caim(quanta):
+        # Get the M_r value (number of values in the bin)
+        m_r = quanta.sum(axis=0, level=0)
 
-        return caim_value/k
+        # Get Max_r (maximum class count for the bin)
+        max_r = quanta.max(axis=0, level=0)
 
-    @staticmethod
-    def within_interval(row, interval, int_len):
-        # Binary search could help for larger intervals
-        return next((i for i, val in interval if val >= row), int_len)
+        # This will only count up the number of bins
+        # that have some items
+        n = len(quanta.index.levels[0])
 
-    @staticmethod
-    def discrete_with_interval(original_data, class_fields,
-                               column, discrete_interval):
-
-        # TODO: make typing more consistent so we don't have to do these checks
-        if type(discrete_interval) != pd.Series:
-            discrete_interval = pd.Series([discrete_interval])
-
-        k = len(discrete_interval)
-
-        num_classes = len(class_fields)
-        column_name = original_data.columns[column]
-
-        f = partial(CAIM.within_interval,
-                    interval=(list(enumerate(discrete_interval.values))), # most readable
-                    #interval=np.array(list(zip(discrete_interval.index.values, discrete_interval.values))),
-                    #interval=np.vstack((discrete_interval.index.values, discrete_interval.values)).T,
-                    int_len=k)
-        # TODO: Use discrete_interval as an np.array rather than series requires changes to within_interval
-        discrete_data = original_data[column_name].apply(f)
-
-        cstate = num_classes
-        fstate = k + 1
-
-        is_one = original_data[class_fields] == 1
-        class_vals = is_one.reset_index()
-
-        # Compute the quanta_matrix columns per each input row
-        class_vals['cols'] = class_vals['index'].apply(discrete_data.values.__getitem__)
-        # Compute the quanta_matrix row per each input row
-        class_vals['rows'] = (original_data[class_fields] * np.arange(num_classes)).T.sum()
-
-        # Build quanta_matrix as np.array
-        # Matlab implementation lets the quanta_matrix auto-resize as values are added in below loop
-        quanta_matrix = np.array([[0]*fstate] * ((class_vals.rows.max()) + 1))
-
-        # Build the quanta_matrix
-        for row in class_vals[['rows', 'cols']].values:
-            quanta_matrix[row[0], row[1]] += 1
-
-        return discrete_data, pd.DataFrame(quanta_matrix)
+        return ((max_r**2/m_r).sum()/n).values[0]
 
     def fit_parallel(self, X, Y):
         self._create_init_data(X, Y)
 
         # TODO: Parallelize with fork server?
         print("Total features: %s" % self.F)
-        #for p in range(0, self.F)[:1]:
-        #Parallel(n_jobs=2)(delayed(sqrt)(i ** 2) for i in range(10))
-        #f = lambda x: self._run_feature(X, Y, x)
-        f = partial (self._run_feature, X=X, Y=Y)
+        f = partial (self._do_run_feature, class_series=Y)
+        cols = sorted(list(X.columns))
+        feature_columns = [X[c] for c in cols]
 
-
-        #p = Parallel(n_jobs=2)
-        #p((f(p) for p in range(0, self.F)))
         pool = multiprocessing.Pool(4)
-        #out1, out2, out3 = zip(*pool.map(calc_stuff, range(0, 10 * offset, offset)))
-        pool.map(f, range(0, self.F))
+        res = pool.map(f, feature_columns)
+        self.caim_results = dict(zip(cols, res))
+        #print(cols, res)
+        #pprint(self.caim_results)
+
 
         #for p in range(0, self.F):
         #    print("Running: %s" % str(p))
         #    self._run_feature(X, Y, p)
 
-        self.DiscretizationSet = pd.DataFrame(self.DiscretizationSet_dict)
+        #self.DiscretizationSet = pd.DataFrame(self.DiscretizationSet_dict)
         return self
+
+    def predict(self, X):
+        return X.apply(lambda x: CAIM.discretize_series(x, self.caim_results[x.name][1]))
 
     def fit(self, X, Y):
         self._create_init_data(X, Y)
 
         # TODO: Parallelize with fork server?
         print("Total features: %s" % self.F)
-        for p in range(0, self.F):
-            print("Running: %s" % str(p))
-            self._run_feature(p, X, Y)
+        results = dict()
+        for f_name in X.columns:
+            print("Running: %s" % str(f_name))
+            results[f_name] = self._run_feature(self.OriginalData[f_name], Y)
 
-        self.DiscretizationSet = pd.DataFrame(self.DiscretizationSet_dict)
         return self
 
 
 def parse_field_arguments(all_columns, target_arg_str):
     feature_fields = None
     if not '-' in  target_arg_str:
-        target_str = target_arg_str.split(',')
+        targets = target_arg_str.split(',')
         try:
             targets_ints = [int(s) for s in target_str]
             targets      = [all_columns[i] for i in targets_ints]
@@ -251,23 +236,24 @@ if __name__ == "__main__":
     else:
         input_df = pd.read_csv(args.input_data[0], header=None)
 
+    # This mangles the ordering, can make it hard to review output
     feature_fields, target_fields = parse_field_arguments(input_df.columns,
                                                           args.target_field)
     if args.verbose:
         print("Feature:\n%s" % str(feature_fields))
         print("Target:\n%s" % str(target_fields))
 
-    caim = CAIM().fit(input_df[feature_fields],
-                      input_df[target_fields])
-
+    caim = CAIM().fit_parallel(input_df[feature_fields],
+                                input_df[target_fields[0]])
+    final_data = caim.predict(input_df[feature_fields])
     if args.verbose:
-        print("New Dataset:\n------------\n%s\n" % str(caim.DiscreteData))
-        print("Sets:\n-----\n%s" % str(caim.DiscretizationSet))
+        print("New Dataset:\n------------\n%s\n" % str(final_data))
+        #print("Sets:\n-----\n%s" % str(caim.DiscretizationSet))
 
     if args.output_base:
-        caim.DiscreteData.to_csv('%s_data.csv' % args.output_base,
+        final_data.to_csv('%s_data.csv' % args.output_base,
                                  index=None)
 
-        caim.DiscretizationSet.to_csv('%s_sets.csv' % args.output_base,
-                                       index=None)
+#        caim.DiscretizationSet.to_csv('%s_sets.csv' % args.output_base,
+#                                       index=None)
 
