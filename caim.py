@@ -6,7 +6,7 @@ import warnings
 import multiprocessing
 from bisect import bisect_left, bisect, bisect_right
 from functools import partial
-from joblib import Parallel, delayed
+#from joblib import Parallel, delayed
 from pprint import pprint
 warnings.filterwarnings('error')
 
@@ -66,7 +66,6 @@ class CAIM(object):
         class_name   = class_series.name
 
         num_classes = len(class_series.unique())-1
-        interval_idx = 1
         done = False
 
         remaining_int = np.array(feature_series.unique()).astype(float)
@@ -75,32 +74,35 @@ class CAIM(object):
         if len(remaining_int) == 2:
             remaining_int = np.insert(remaining_int, 1, remaining_int.max()/2.0)
         elif len(remaining_int) == 1:
-            msg="Feature %s has only one unique value" % feature_series.name
+            msg = "Feature %s has only one unique value" % feature_series.name
             raise ValueError(msg)
 
         # Starting interval is end to end set
         disc_interval = np.array([remaining_int[0], remaining_int[-1]])
         remaining_int = remaining_int[1:-1]
-        f = lambda x: CAIM.build_quanta(input_data, x, feature_name, class_name)
+        f = lambda x: CAIM.compute_caim(CAIM.build_quanta(input_data, x, feature_name, class_name))
 
         global_caim = 0
         while not done:
             current_caim = -np.inf
             current_int = np.nan
 
-            possibble_int = pd.Series([np.sort(np.insert(disc_interval, 0, add_int)) for add_int in remaining_int])
-            caims = possibble_int.apply(f).apply(CAIM.compute_caim)
-            caim_maxidx = caims.idxmax()
+            #for add_int in remaining_int:
+            #    tmp_caim = f(np.sort(np.insert(disc_interval, 0, add_int)))
+            #    if tmp_caim > current_caim:
+            #        current_caim = tmp_caim
+            #
+            #ints_and_caims = [(add_int, f(np.sort(np.insert(disc_interval, 0, add_int)))) for add_int in remaining_int]
+            #max_int_and_caim = max(ints_and_caims, key=lambda x:x[1])
 
-            #caims_ints = pd.concat([possibble_int, caims], axis=1)
-            #best = caims_ints.iloc[caims_ints[1].idxmax()]
+            ints_and_caims = ((add_int, f(np.sort(np.insert(disc_interval, 0, add_int)))) for add_int in remaining_int)
+            max_int_and_caim = max(ints_and_caims, key=lambda x: x[1])
 
-            #current_caim = best[1]
-            #current_int = best[0]
-            current_caim = caims[caim_maxidx]
-            current_int = possibble_int[caim_maxidx]
-            current_add_int = remaining_int[caim_maxidx]
+            current_caim = max_int_and_caim[1]
+            current_int = np.sort(np.insert(disc_interval, 0, max_int_and_caim[0]))
+            current_add_int = max_int_and_caim[0]
             better_caim = current_caim > global_caim
+
             if better_caim:
                 #print("Current CAIM: %f" % current_caim)
                 #print("Global CAIM: %f" % global_caim)
@@ -145,17 +147,18 @@ class CAIM(object):
         n = len(quanta.index.levels[0])
 
         return ((max_r**2/m_r).sum()/n).values[0]
+        #return pd.eval(((max_r**2/m_r).sum()/n))
 
-    def fit_parallel(self, X, Y):
+    def fit_parallel(self, X, Y, n_jobs=8):
         self._create_init_data(X, Y)
 
         # TODO: Parallelize with fork server?
         print("Total features: %s" % self.F)
-        f = partial (self._do_run_feature, class_series=Y)
+        f = partial(self._do_run_feature, class_series=Y)
         cols = sorted(list(X.columns))
         feature_columns = [X[c] for c in cols]
 
-        pool = multiprocessing.Pool(4)
+        pool = multiprocessing.Pool(n_jobs)
         res = pool.map(f, feature_columns)
         self.caim_results = dict(zip(cols, res))
         #print(cols, res)
@@ -182,6 +185,8 @@ class CAIM(object):
             print("Running: %s" % str(f_name))
             results[f_name] = self._run_feature(self.OriginalData[f_name], Y)
 
+        self.caim_results = results
+
         return self
 
 
@@ -190,7 +195,7 @@ def parse_field_arguments(all_columns, target_arg_str):
     if not '-' in  target_arg_str:
         targets = target_arg_str.split(',')
         try:
-            targets_ints = [int(s) for s in target_str]
+            targets_ints = [int(s) for s in targets]
             targets      = [all_columns[i] for i in targets_ints]
         except:
             pass
@@ -244,7 +249,7 @@ if __name__ == "__main__":
         print("Target:\n%s" % str(target_fields))
 
     caim = CAIM().fit_parallel(input_df[feature_fields],
-                                input_df[target_fields[0]])
+                              input_df[target_fields[0]])
     final_data = caim.predict(input_df[feature_fields])
     if args.verbose:
         print("New Dataset:\n------------\n%s\n" % str(final_data))
