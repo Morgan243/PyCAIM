@@ -8,6 +8,7 @@ On performance, the Java implementation has notably lower latency (higher perfor
 
 **TODO**
 
+* **Fix Unit Tests**
 * Continue to re-implement in Pandas/NumPy for speed (avoid loops)
 * Add more test data and corresponding unittests
 * Clean-up API and document
