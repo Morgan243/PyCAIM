@@ -122,8 +122,11 @@ class CAIM(object):
     def predict(self, X):
         return X.apply(lambda x: CAIM.discretize_series(x, self.caim_results[x.name][1]))
 
-    def fit_parallel(self, X, Y, n_jobs=8):
+    def fit(self, X, Y, n_jobs=-1):
         self._create_init_data(X, Y)
+
+        if n_jobs == -1:
+            n_jobs = multiprocessing.cpu_count()
 
         print("Total features: %s" % self.F)
         f = partial(self._do_run_feature, class_series=Y)
@@ -140,7 +143,7 @@ class CAIM(object):
 
         return self
 
-    def fit(self, X, Y):
+    def fit_old(self, X, Y):
         self._create_init_data(X, Y)
 
         # TODO: Parallelize with fork server?
@@ -208,8 +211,8 @@ if __name__ == "__main__":
         print("Feature:\n%s" % str(feature_fields))
         print("Target:\n%s" % str(target_field))
 
-    caim = CAIM().fit_parallel(input_df[feature_fields],
-                               input_df[target_field])
+    caim = CAIM().fit(input_df[feature_fields],
+                      input_df[target_field])
 
     final_data = caim.predict(input_df[feature_fields]).join(input_df[target_field])
     if args.verbose:
