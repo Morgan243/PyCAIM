@@ -1,12 +1,9 @@
 import argparse
 import pandas as pd
 import numpy as np
-import math
 import warnings
 import multiprocessing
-from bisect import bisect_left, bisect, bisect_right
 from functools import partial
-#from joblib import Parallel, delayed
 from pprint import pprint
 warnings.filterwarnings('error')
 
@@ -16,7 +13,6 @@ class CAIM(object):
         pass
 
     def _create_init_data(self, X, Y):
-        full_columns = list(X.columns) + [Y.name]
         if isinstance(Y, pd.Series):
             c = 1
         else:
@@ -32,18 +28,7 @@ class CAIM(object):
         Y = Y.astype(int)
         self.OriginalData = X.join(Y)
 
-        discrete_data = pd.DataFrame(0,
-                                     index=np.arange(m),
-                                     columns=full_columns)
-        #discrete_data[Y.columns] = Y
-        #discrete_data[Y.columns] = Y
-        #max_num_f = math.floor(m/(3*c))
-
         self.C, self.F, self.M = c, f, m
-        #self.DiscreteData      = discrete_data
-        #self.DiscretizationSet_dict = dict()
-        #self.DiscretizationSet = None
-        #self.MaxNumF           = max_num_f
 
     @staticmethod
     def discretize_series(series, interval):
@@ -54,6 +39,7 @@ class CAIM(object):
         return binned
 
     def _do_run_feature(self, feature_series, class_series, **kwargs):
+        """Wrapper for using exec run_feature in parallel proc"""
         return CAIM._run_feature(feature_series, class_series, **kwargs)
 
     @staticmethod
@@ -84,16 +70,6 @@ class CAIM(object):
 
         global_caim = 0
         while not done:
-            current_caim = -np.inf
-            current_int = np.nan
-
-            #for add_int in remaining_int:
-            #    tmp_caim = f(np.sort(np.insert(disc_interval, 0, add_int)))
-            #    if tmp_caim > current_caim:
-            #        current_caim = tmp_caim
-            #
-            #ints_and_caims = [(add_int, f(np.sort(np.insert(disc_interval, 0, add_int)))) for add_int in remaining_int]
-            #max_int_and_caim = max(ints_and_caims, key=lambda x:x[1])
 
             ints_and_caims = ((add_int, f(np.sort(np.insert(disc_interval, 0, add_int)))) for add_int in remaining_int)
             max_int_and_caim = max(ints_and_caims, key=lambda x: x[1])
@@ -104,22 +80,17 @@ class CAIM(object):
             better_caim = current_caim > global_caim
 
             if better_caim:
-                #print("Current CAIM: %f" % current_caim)
-                #print("Global CAIM: %f" % global_caim)
                 disc_interval = current_int
                 global_caim = current_caim
             if k < num_classes or better_caim:
-                #print(current_add_int)
                 remaining_int = remaining_int[remaining_int != current_add_int]
-
                 k += 1
             else:
                 done = True
 
             if len(remaining_int) == 0:
                 done = True
-        #print("Best CAIM: %f" %global_caim)
-        #print("Interval : %s" % str(disc_interval))
+
         return global_caim, disc_interval
 
     @staticmethod
@@ -147,33 +118,27 @@ class CAIM(object):
         n = len(quanta.index.levels[0])
 
         return ((max_r**2/m_r).sum()/n).values[0]
-        #return pd.eval(((max_r**2/m_r).sum()/n))
+
+    def predict(self, X):
+        return X.apply(lambda x: CAIM.discretize_series(x, self.caim_results[x.name][1]))
 
     def fit_parallel(self, X, Y, n_jobs=8):
         self._create_init_data(X, Y)
 
-        # TODO: Parallelize with fork server?
         print("Total features: %s" % self.F)
         f = partial(self._do_run_feature, class_series=Y)
         cols = sorted(list(X.columns))
         feature_columns = [X[c] for c in cols]
 
+        print("Running with %d processes" % n_jobs)
+        # Run in parallel across multiple processes
         pool = multiprocessing.Pool(n_jobs)
         res = pool.map(f, feature_columns)
+
+        # Assemble results
         self.caim_results = dict(zip(cols, res))
-        #print(cols, res)
-        #pprint(self.caim_results)
 
-
-        #for p in range(0, self.F):
-        #    print("Running: %s" % str(p))
-        #    self._run_feature(X, Y, p)
-
-        #self.DiscretizationSet = pd.DataFrame(self.DiscretizationSet_dict)
         return self
-
-    def predict(self, X):
-        return X.apply(lambda x: CAIM.discretize_series(x, self.caim_results[x.name][1]))
 
     def fit(self, X, Y):
         self._create_init_data(X, Y)
@@ -191,23 +156,20 @@ class CAIM(object):
 
 
 def parse_field_arguments(all_columns, target_arg_str):
-    feature_fields = None
-    if not '-' in  target_arg_str:
-        targets = target_arg_str.split(',')
-        try:
-            targets_ints = [int(s) for s in targets]
-            targets      = [all_columns[i] for i in targets_ints]
-        except:
-            pass
+    """Return tuple of feature columns and target column"""
 
+    try:
+        target = all_columns[int(target_arg_str)]
+    except ValueError:
+        target = target_arg_str
+
+    features = list(all_columns).copy()
+    if target in features:
+        features.remove(target)
     else:
-        target_points = target_arg_str.split('-')
-        start, end = int(target_points[0]), int(target_points[1])
-        targets      = [all_columns[i] for i in range(start, end+1)]
+        del features[target]
 
-    features = list(set(all_columns) - set(targets))
-
-    return features, targets
+    return features, target
 
 if __name__ == "__main__":
     desc = "CAIM Algorithm Command Line Tool and Library"
@@ -235,13 +197,12 @@ if __name__ == "__main__":
                         help="Output additional information")
 
     args = parser.parse_args()
+    input_data = args.input_data[0]
+    header = 0 if args.header else None
 
-    if args.header:
-        input_df = pd.read_csv(args.input_data[0])
-    else:
-        input_df = pd.read_csv(args.input_data[0], header=None)
+    if args.verbose: print("Loading data from %s" % input_data)
+    input_df = pd.read_csv(input_data, header=header)
 
-    # This mangles the ordering, can make it hard to review output
     feature_fields, target_fields = parse_field_arguments(input_df.columns,
                                                           args.target_field)
     if args.verbose:
@@ -249,16 +210,14 @@ if __name__ == "__main__":
         print("Target:\n%s" % str(target_fields))
 
     caim = CAIM().fit_parallel(input_df[feature_fields],
-                              input_df[target_fields[0]])
+                              input_df[target_fields])
+
     final_data = caim.predict(input_df[feature_fields])
     if args.verbose:
+        #print("Original Dataset:\n-----------\n%s\n" % str(input_df))
         print("New Dataset:\n------------\n%s\n" % str(final_data))
-        #print("Sets:\n-----\n%s" % str(caim.DiscretizationSet))
 
     if args.output_base:
         final_data.to_csv('%s_data.csv' % args.output_base,
-                                 index=None)
-
-#        caim.DiscretizationSet.to_csv('%s_sets.csv' % args.output_base,
-#                                       index=None)
+                          index=None)
 
