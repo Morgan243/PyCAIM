@@ -157,7 +157,6 @@ class CAIM(object):
 
 def parse_field_arguments(all_columns, target_arg_str):
     """Return tuple of feature columns and target column"""
-
     try:
         target = all_columns[int(target_arg_str)]
     except ValueError:
@@ -179,7 +178,7 @@ if __name__ == "__main__":
                         type=str, nargs=1,
                         help="CSV input data file")
 
-    parser.add_argument('-t', '--target-fields',
+    parser.add_argument('-t', '--target-field',
                         dest='target_field', default=None,
                         help=("Target fields as integers (0-indexed) " +
                               "or strings corresponding to column names"))
@@ -203,21 +202,20 @@ if __name__ == "__main__":
     if args.verbose: print("Loading data from %s" % input_data)
     input_df = pd.read_csv(input_data, header=header)
 
-    feature_fields, target_fields = parse_field_arguments(input_df.columns,
+    feature_fields, target_field = parse_field_arguments(input_df.columns,
                                                           args.target_field)
     if args.verbose:
         print("Feature:\n%s" % str(feature_fields))
-        print("Target:\n%s" % str(target_fields))
+        print("Target:\n%s" % str(target_field))
 
     caim = CAIM().fit_parallel(input_df[feature_fields],
-                              input_df[target_fields])
+                               input_df[target_field])
 
-    final_data = caim.predict(input_df[feature_fields])
+    final_data = caim.predict(input_df[feature_fields]).join(input_df[target_field])
     if args.verbose:
-        #print("Original Dataset:\n-----------\n%s\n" % str(input_df))
         print("New Dataset:\n------------\n%s\n" % str(final_data))
 
     if args.output_base:
         final_data.to_csv('%s_data.csv' % args.output_base,
-                          index=None)
+                          index=None, header=True if header is not None else False)
 
