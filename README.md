@@ -1,10 +1,12 @@
-CAIM is a supervised discretization method [1] and Python-CAIM is a Python implementation of CAIM. **This is a work in progres, results should be closely inspected**. Pull requests welcome.
+CAIM is a supervised discretization method [1] and Python-CAIM is a Python implementation of CAIM. **This is a work in progres, results should be closely inspected**. The goal is to provide both a CLI to discretize data for later use as well as a class for programmatic usage. Pull requests welcome.
 
 There is a [MATLAB implementation](http://www.mathworks.com/matlabcentral/fileexchange/24344-caim-discretization-algorithm) by Guangdi Li and a [Java implementation](http://www.cioslab.vcu.edu/index.html) (Research->Data Mining Toole) by the author.
 
-Current Python-CAIM is working on UCI's Musk1 dataset as well as other toy datasets. Results are validated against the Java implementation (see above). 
+Current Python-CAIM is working on UCI's Musk1 dataset as well as other toy datasets. Results are validated against the Java implementation (see above).
 
 On performance, the Java implementation has notably lower latency (higher performance). This may be due to Java being fundamentally faster than Python, design tricks/shortcuts, or a combination of both. Currently difficult to determine source of improved performance since source code does not appear to be included in the CAIM JAR file. The MatLab version is comparable and often faster for very small datasets. However, Python-CAIM can parallelize discretization, and can thus scale better for datasets with many features.
+
+**CLI Options**
 
 	age: caim.py [-h] [-t TARGET_FIELD] [-o OUTPUT_PATH] [-H] [-q] input_file
 
