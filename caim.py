@@ -214,7 +214,8 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--target-field',
                         dest='target_field', default=None,
                         help=("Target fields as integers (0-indexed) " +
-                              "or strings corresponding to column names"))
+                              "or strings corresponding to column names." +
+                              "Negative indices (e.g. -1) are allowed."))
 
     parser.add_argument('-o', '--output-base-name',
                         dest='output_base', default=None,
@@ -246,7 +247,7 @@ if __name__ == "__main__":
 
     caim = CAIM().fit(input_df[feature_fields],
                       input_df[target_field],
-                      not args.quiet)
+                      -1, not args.quiet)
 
     final_data = caim.predict(input_df[feature_fields]).join(input_df[target_field])
 
@@ -257,6 +258,6 @@ if __name__ == "__main__":
         print("New Dataset:\n------------\n%s\n" % str(final_data))
 
     if args.output_base:
-        final_data.to_csv('%s_data.csv' % args.output_base,
+        final_data.to_csv('%s_caim_data.csv' % args.output_base,
                           index=None, header=True if header is not None else False)
 
