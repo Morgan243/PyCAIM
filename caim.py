@@ -4,13 +4,24 @@ import numpy as np
 import warnings
 import multiprocessing
 from functools import partial
-from pprint import pprint
 warnings.filterwarnings('error')
 
 
 class CAIM(object):
     def __init__(self):
-        pass
+        self.OriginalData = None
+        self.caim_results = None
+
+    def print_interval_results(self):
+        if self.caim_results is None:
+            print("CAIM object not fitted")
+            return
+
+        for col in sorted(self.caim_results.keys()):
+            caim_val, intervals = self.caim_results[col]
+            print("Column: %s" % str(col))
+            print("\tCAIM Value: %f" % caim_val)
+            print("\tIntervals: %s" % str(intervals))
 
     def _create_init_data(self, X, Y):
         if isinstance(Y, pd.Series):
@@ -25,9 +36,17 @@ class CAIM(object):
 
         assert len(X) == len(Y)
         m = len(X)
-        Y = Y.astype(int)
+        try:
+            Y = Y.astype(int).copy()
+        except:
+            y_vals = Y.unique()
+            self.y_mapping = dict(zip(y_vals, range(0, len(y_vals))))
+            Y = Y.apply(self.y_mapping.__getitem__).astype(int).copy()
+
         self.OriginalData = X.join(Y)
 
+        self.X = X
+        self.num_Y = Y
         self.C, self.F, self.M = c, f, m
 
     @staticmethod
@@ -122,18 +141,26 @@ class CAIM(object):
     def predict(self, X):
         return X.apply(lambda x: CAIM.discretize_series(x, self.caim_results[x.name][1]))
 
-    def fit(self, X, Y, n_jobs=-1):
+    def fit(self, X, Y, n_jobs=-1, verbose=False):
         self._create_init_data(X, Y)
 
         if n_jobs == -1:
             n_jobs = multiprocessing.cpu_count()
 
-        print("Total features: %s" % self.F)
-        f = partial(self._do_run_feature, class_series=Y)
+        # Don't start more processes than will be needed
+        if n_jobs > len(X.columns):
+            n_jobs = len(X.columns)
+
+        if verbose:
+            print("Total features: %s" % self.F)
+
+        f = partial(self._do_run_feature, class_series=self.num_Y)
         cols = sorted(list(X.columns))
         feature_columns = [X[c] for c in cols]
 
-        print("Running with %d processes" % n_jobs)
+        if verbose:
+            print("Running with %d processes" % n_jobs)
+
         # Run in parallel across multiple processes
         pool = multiprocessing.Pool(n_jobs)
         res = pool.map(f, feature_columns)
@@ -144,6 +171,7 @@ class CAIM(object):
         return self
 
     def fit_old(self, X, Y):
+        """Old Single process version for debugging"""
         self._create_init_data(X, Y)
 
         # TODO: Parallelize with fork server?
@@ -157,13 +185,15 @@ class CAIM(object):
 
         return self
 
-
-def parse_field_arguments(all_columns, target_arg_str):
+def parse_field_arguments(all_columns, target_arg_str, verbose=False):
     """Return tuple of feature columns and target column"""
     try:
         target = all_columns[int(target_arg_str)]
     except ValueError:
         target = target_arg_str
+
+    if verbose:
+        print("Target Column: %s" % str(target))
 
     features = list(all_columns).copy()
     if target in features:
@@ -194,28 +224,36 @@ if __name__ == "__main__":
                         dest='header', default=False, action='store_true',
                         help="Use first row as column")
 
-    parser.add_argument('-v', '--verbose',
-                        dest='verbose', default=False, action='store_true',
-                        help="Output additional information")
+    parser.add_argument('-q', '--quiet',
+                        dest='quiet', default=False, action='store_true',
+                        help="Minimal information is printed to STDOUT")
 
     args = parser.parse_args()
     input_data = args.input_data[0]
     header = 0 if args.header else None
 
-    if args.verbose: print("Loading data from %s" % input_data)
+    if not args.quiet:
+        print("Loading data from %s" % input_data)
+
     input_df = pd.read_csv(input_data, header=header)
 
     feature_fields, target_field = parse_field_arguments(input_df.columns,
-                                                          args.target_field)
-    if args.verbose:
+                                                         args.target_field,
+                                                         not args.quiet)
+    if not args.quiet:
         print("Feature:\n%s" % str(feature_fields))
         print("Target:\n%s" % str(target_field))
 
     caim = CAIM().fit(input_df[feature_fields],
-                      input_df[target_field])
+                      input_df[target_field],
+                      not args.quiet)
 
     final_data = caim.predict(input_df[feature_fields]).join(input_df[target_field])
-    if args.verbose:
+
+    if not args.quiet:
+        #print("Intervals:\n%s\n" % str(caim.caim_results))
+        caim.print_interval_results()
+    if not args.quiet:
         print("New Dataset:\n------------\n%s\n" % str(final_data))
 
     if args.output_base:
