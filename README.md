@@ -6,24 +6,23 @@ Current Python-CAIM is working on UCI's Musk1 dataset as well as other toy datas
 
 On performance, the Java implementation has notably lower latency (higher performance). This may be due to Java being fundamentally faster than Python, design tricks/shortcuts, or a combination of both. Currently difficult to determine source of improved performance since source code does not appear to be included in the CAIM JAR file. The MatLab version is comparable and often faster for very small datasets. However, Python-CAIM can parallelize discretization, and can thus scale better for datasets with many features.
 
-    usage: caim.py [-h] [-t TARGET_FIELD] [-o OUTPUT_BASE] [-H] [-q] input_file
+	age: caim.py [-h] [-t TARGET_FIELD] [-o OUTPUT_PATH] [-H] [-q] input_file
 
-    CAIM Algorithm Command Line Tool and Library
+	CAIM Algorithm Command Line Tool and Library
 
-    positional arguments:
-    input_file            CSV input data file
+	positional arguments:
+	input_file            CSV input data file
 
-    optional arguments:
-    -h, --help            show this help message and exit
-    -t TARGET_FIELD, --target-field TARGET_FIELD
-                            Target fields as integers (0-indexed) or strings
-                            corresponding to column names.Negative indices (e.g.
-                            -1) are allowed.
-    -o OUTPUT_BASE, --output-base-name OUTPUT_BASE
-                            Base name for outputs: <base>_data.csv and
-                            <base>_sets.csv
-    -H, --header          Use first row as column
-    -q, --quiet           Minimal information is printed to STDOUT
+	optional arguments:
+	-h, --help            show this help message and exit
+	-t TARGET_FIELD, --target-field TARGET_FIELD
+							Target fields as integers (0-indexed) or strings
+							corresponding to column names.Negative indices (e.g.
+							-1) are allowed.
+	-o OUTPUT_PATH, --output-path OUTPUT_PATH
+							File path to write discrete form of data in CSV format
+	-H, --header          Use first row as column name rows
+	-q, --quiet           Minimal information is printed to STDOUT
 
 **Example Usages**
 
@@ -33,7 +32,7 @@ Discretize IRIS data
 
 Discretize IRIS data and save discrete results to iris_caim_data.csv
 
-    python3 ./caim.py datasets/iris.data -t -1 -H -o iris
+    python3 ./caim.py datasets/iris.data -t -1 -H -o iris_caim.csv
 
 Discretize musk1
 

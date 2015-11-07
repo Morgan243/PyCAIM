@@ -217,13 +217,13 @@ if __name__ == "__main__":
                               "or strings corresponding to column names." +
                               "Negative indices (e.g. -1) are allowed."))
 
-    parser.add_argument('-o', '--output-base-name',
-                        dest='output_base', default=None,
-                        help="Base name for outputs: <base>_data.csv and <base>_sets.csv")
+    parser.add_argument('-o', '--output-path',
+                        dest='output_path', default=None,
+                        help="File path to write discrete form of data in CSV format")
 
     parser.add_argument('-H', '--header',
                         dest='header', default=False, action='store_true',
-                        help="Use first row as column")
+                        help="Use first row as column name rows")
 
     parser.add_argument('-q', '--quiet',
                         dest='quiet', default=False, action='store_true',
@@ -257,7 +257,7 @@ if __name__ == "__main__":
     if not args.quiet:
         print("New Dataset:\n------------\n%s\n" % str(final_data))
 
-    if args.output_base:
-        final_data.to_csv('%s_caim_data.csv' % args.output_base,
+    if args.output_path:
+        final_data.to_csv('%s' % args.output_path,
                           index=None, header=True if header is not None else False)
 
