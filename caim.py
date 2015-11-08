@@ -32,21 +32,21 @@ class CAIM(object):
         if isinstance(X, pd.Series):
             f = 1
         else:
-            f = len(X.columns)
+            self.x_cols = X.columns[X.dtypes != 'object']
+            self.X = X[self.x_cols].copy()
+            f = len(self.x_cols)
 
         assert len(X) == len(Y)
         m = len(X)
         try:
-            Y = Y.astype(int).copy()
+            self.num_Y = Y.astype(int).copy()
         except:
             y_vals = Y.unique()
             self.y_mapping = dict(zip(y_vals, range(0, len(y_vals))))
-            Y = Y.apply(self.y_mapping.__getitem__).astype(int).copy()
+            self.num_Y = Y.apply(self.y_mapping.__getitem__).astype(int).copy()
 
-        self.OriginalData = X.join(Y)
+        self.OriginalData = self.X.join(Y)
 
-        self.X = X
-        self.num_Y = Y
         self.C, self.F, self.M = c, f, m
 
     @staticmethod
@@ -63,7 +63,7 @@ class CAIM(object):
 
     @staticmethod
     def _run_feature(feature_series, class_series):
-        print("Running %s" % str(feature_series.name))
+        print("Running: %s" % str(feature_series.name))
         k = 1
 
         input_data = pd.DataFrame([feature_series, class_series]).T
@@ -71,13 +71,20 @@ class CAIM(object):
         class_name   = class_series.name
 
         num_classes = len(class_series.unique())-1
+        #num_classes = len(class_series.unique())
         done = False
 
         remaining_int = np.array(feature_series.unique()).astype(float)
         remaining_int.sort()
+        remaining_int = np.insert(remaining_int, 1,
+                                  remaining_int[0] + (remaining_int[1] - remaining_int[0])/2.0)
+
+
 
         if len(remaining_int) == 2:
             remaining_int = np.insert(remaining_int, 1, remaining_int.max()/2.0)
+            #remaining_int = np.insert(remaining_int, 1, remaining_int.min()+.5)
+            print("Remaining Interval: " + str(remaining_int))
         elif len(remaining_int) == 1:
             msg = "Feature %s has only one unique value" % feature_series.name
             raise ValueError(msg)
@@ -104,6 +111,10 @@ class CAIM(object):
             if k < num_classes or better_caim:
                 remaining_int = remaining_int[remaining_int != current_add_int]
                 k += 1
+            elif k == num_classes:
+                disc_interval = current_int
+                global_caim = current_caim
+                done = True
             else:
                 done = True
 
@@ -118,6 +129,10 @@ class CAIM(object):
         binned = pd.Series(np.digitize(input_data[feature_column],
                                        intervals,
                                        right=True)).apply(lambda x: x if x != 0 else 1)
+        #int_len = len(intervals)
+        #binned = pd.Series(np.digitize(input_data[feature_column],
+        #                               intervals,
+        #                               right=False)).apply(lambda x: x if x != int_len else int_len-1)
 
         binned.name = 'bins'
         grpby = [binned, class_column]
@@ -177,9 +192,11 @@ class CAIM(object):
         # TODO: Parallelize with fork server?
         print("Total features: %s" % self.F)
         results = dict()
-        for f_name in X.columns:
-            print("Running: %s" % str(f_name))
-            results[f_name] = self._run_feature(self.OriginalData[f_name], Y)
+        #for f_name in X.columns:
+        for f_name in self.x_cols:
+            #print("Running: %s" % str(f_name))
+            results[f_name] = self._run_feature(self.OriginalData[f_name],
+                                                self.num_Y)
 
         self.caim_results = results
 
@@ -241,6 +258,7 @@ if __name__ == "__main__":
     feature_fields, target_field = parse_field_arguments(input_df.columns,
                                                          args.target_field,
                                                          not args.quiet)
+    feature_fields = list(input_df[feature_fields].columns[input_df[feature_fields].dtypes != 'object'])
     if not args.quiet:
         print("Feature:\n%s" % str(feature_fields))
         print("Target:\n%s" % str(target_field))
@@ -248,6 +266,8 @@ if __name__ == "__main__":
     caim = CAIM().fit(input_df[feature_fields],
                       input_df[target_field],
                       -1, not args.quiet)
+    #caim = CAIM().fit_old(input_df[feature_fields],
+    #                      input_df[target_field])
 
     final_data = caim.predict(input_df[feature_fields]).join(input_df[target_field])
 
@@ -255,7 +275,8 @@ if __name__ == "__main__":
         #print("Intervals:\n%s\n" % str(caim.caim_results))
         caim.print_interval_results()
     if not args.quiet:
-        print("New Dataset:\n------------\n%s\n" % str(final_data))
+        #print("New Dataset:\n------------\n%s\n" % str(final_data))
+        pass
 
     if args.output_path:
         final_data.to_csv('%s' % args.output_path,
