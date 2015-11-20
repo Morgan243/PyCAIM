@@ -230,8 +230,8 @@ if __name__ == "__main__":
 
     parser.add_argument('-t', '--target-field',
                         dest='target_field', default=None,
-                        help=("Target fields as integers (0-indexed) " +
-                              "or strings corresponding to column names." +
+                        help=("Target field as an integer (0-indexed) "+
+                              "or string corresponding to column name. "+
                               "Negative indices (e.g. -1) are allowed."))
 
     parser.add_argument('-o', '--output-path',

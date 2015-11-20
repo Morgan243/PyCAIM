@@ -8,24 +8,24 @@ On performance, the Java implementation has notably lower latency (higher perfor
 
 **CLI Options**
 
-    Usage: caim.py [-h] [-t TARGET_FIELD] [-o OUTPUT_PATH] [-H] [-q] input_file
+    usage: caim.py [-h] [-t TARGET_FIELD] [-o OUTPUT_PATH] [-H] [-q] input_file
 
     CAIM Algorithm Command Line Tool and Library
 
     positional arguments:
-    input_file            CSV input data file
+      input_file            CSV input data file
 
     optional arguments:
-    -h, --help            show this help message and exit
-    -t TARGET_FIELD, --target-field TARGET_FIELD
-                            Target fields as integers (0-indexed) or strings
-                            corresponding to column names.Negative indices (e.g.
+      -h, --help            show this help message and exit
+      -t TARGET_FIELD, --target-field TARGET_FIELD
+                            Target field as an integer (0-indexed) or string
+                            corresponding to column name. Negative indices (e.g.
                             -1) are allowed.
-    -o OUTPUT_PATH, --output-path OUTPUT_PATH
-                            File path to write discrete form of data in CSV format
-    -H, --header          Use first row as column name rows
-    -q, --quiet           Minimal information is printed to STDOUT
-
+      -o OUTPUT_PATH, --output-path OUTPUT_PATH
+                            File path to write discretized form of data in CSV
+                            format
+      -H, --header          Use first row as column/field names
+      -q, --quiet           Minimal information is printed to STDOUT
 
 **Example Usages**
 
