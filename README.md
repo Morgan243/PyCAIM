@@ -1,6 +1,6 @@
 CAIM is a supervised discretization method [1] and Python-CAIM is a Python implementation of CAIM. **This is a work in progres, results should be closely inspected**. The goal is to provide both a CLI to discretize data for later use as well as a class for programmatic usage. Pull requests welcome.
 
-There is a [MATLAB implementation](http://www.mathworks.com/matlabcentral/fileexchange/24344-caim-discretization-algorithm) by Guangdi Li and a [Java implementation](http://www.cioslab.vcu.edu/index.html) (Research->Data Mining Toole) by the author.
+There is a [MATLAB implementation](http://www.mathworks.com/matlabcentral/fileexchange/24344-caim-discretization-algorithm) by Guangdi Li and a [Java implementation](http://www.cioslab.vcu.edu/index.html) (Research->Data Mining Tool) by the author. The latter being an implementation of the currently unpublished CAIM+ version of the algorithm.
 
 Current Python-CAIM is working on UCI's Musk1 dataset as well as other toy datasets. Results are validated against the Java implementation (see above).
 
@@ -8,23 +8,24 @@ On performance, the Java implementation has notably lower latency (higher perfor
 
 **CLI Options**
 
-	age: caim.py [-h] [-t TARGET_FIELD] [-o OUTPUT_PATH] [-H] [-q] input_file
+    Usage: caim.py [-h] [-t TARGET_FIELD] [-o OUTPUT_PATH] [-H] [-q] input_file
 
-	CAIM Algorithm Command Line Tool and Library
+    CAIM Algorithm Command Line Tool and Library
 
-	positional arguments:
-	input_file            CSV input data file
+    positional arguments:
+    input_file            CSV input data file
 
-	optional arguments:
-	-h, --help            show this help message and exit
-	-t TARGET_FIELD, --target-field TARGET_FIELD
-							Target fields as integers (0-indexed) or strings
-							corresponding to column names.Negative indices (e.g.
-							-1) are allowed.
-	-o OUTPUT_PATH, --output-path OUTPUT_PATH
-							File path to write discrete form of data in CSV format
-	-H, --header          Use first row as column name rows
-	-q, --quiet           Minimal information is printed to STDOUT
+    optional arguments:
+    -h, --help            show this help message and exit
+    -t TARGET_FIELD, --target-field TARGET_FIELD
+                            Target fields as integers (0-indexed) or strings
+                            corresponding to column names.Negative indices (e.g.
+                            -1) are allowed.
+    -o OUTPUT_PATH, --output-path OUTPUT_PATH
+                            File path to write discrete form of data in CSV format
+    -H, --header          Use first row as column name rows
+    -q, --quiet           Minimal information is printed to STDOUT
+
 
 **Example Usages**
 

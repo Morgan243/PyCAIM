@@ -38,6 +38,7 @@ class CAIM(object):
 
         assert len(X) == len(Y)
         m = len(X)
+
         try:
             self.num_Y = Y.astype(int).copy()
         except:
@@ -79,8 +80,6 @@ class CAIM(object):
         remaining_int = np.insert(remaining_int, 1,
                                   remaining_int[0] + (remaining_int[1] - remaining_int[0])/2.0)
 
-
-
         if len(remaining_int) == 2:
             remaining_int = np.insert(remaining_int, 1, remaining_int.max()/2.0)
             #remaining_int = np.insert(remaining_int, 1, remaining_int.min()+.5)
@@ -108,6 +107,7 @@ class CAIM(object):
             if better_caim:
                 disc_interval = current_int
                 global_caim = current_caim
+
             if k < num_classes or better_caim:
                 remaining_int = remaining_int[remaining_int != current_add_int]
                 k += 1
@@ -236,11 +236,11 @@ if __name__ == "__main__":
 
     parser.add_argument('-o', '--output-path',
                         dest='output_path', default=None,
-                        help="File path to write discrete form of data in CSV format")
+                        help="File path to write discretized form of data in CSV format")
 
     parser.add_argument('-H', '--header',
                         dest='header', default=False, action='store_true',
-                        help="Use first row as column name rows")
+                        help="Use first row as column/field names ")
 
     parser.add_argument('-q', '--quiet',
                         dest='quiet', default=False, action='store_true',
