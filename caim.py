@@ -266,17 +266,11 @@ if __name__ == "__main__":
     caim = CAIM().fit(input_df[feature_fields],
                       input_df[target_field],
                       -1, not args.quiet)
-    #caim = CAIM().fit_old(input_df[feature_fields],
-    #                      input_df[target_field])
 
     final_data = caim.predict(input_df[feature_fields]).join(input_df[target_field])
 
     if not args.quiet:
-        #print("Intervals:\n%s\n" % str(caim.caim_results))
         caim.print_interval_results()
-    if not args.quiet:
-        #print("New Dataset:\n------------\n%s\n" % str(final_data))
-        pass
 
     if args.output_path:
         final_data.to_csv('%s' % args.output_path,
